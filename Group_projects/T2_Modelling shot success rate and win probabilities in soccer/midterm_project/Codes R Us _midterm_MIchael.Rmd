@@ -1,0 +1,571 @@
+---
+title: "CodesRUs_midterm"
+output:
+  html_document: 
+    prettydoc::html_pretty:
+      theme: cayman
+    code_folding: hide
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+library(ggplot2)
+library(ggsoccer)
+library(ggpubr)
+library(dplyr)
+library(rayshader)
+library(multimode)
+library(MASS)
+library(plotly)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+## R Markdown
+
+```{r load data}
+#Load Event data from each competition as a dataframe
+england<-data.frame(read.csv('./datasets/events_England_new.csv'))
+italy<-data.frame(read.csv('./datasets/events_Italy_new.csv'))
+germany<-data.frame(read.csv('./datasets/events_Germany_new.csv'))
+france<-data.frame(read.csv('./datasets/events_France_new.csv'))
+spain<-data.frame(read.csv('./datasets/events_Spain_new.csv'))
+european<-data.frame(read.csv('./datasets/events_European_Championship_new.csv'))
+worldcup<-data.frame(read.csv('./datasets/events_World_Cup_new.csv'))
+event_data<-rbind(england, italy, germany, france, spain, european, worldcup)
+```
+
+```{r combine data frames}
+#Append dataframes into a single dataframe from which to draw.
+event_data<-rbind(england, italy, germany, france, spain, european, worldcup)
+```
+
+```{r pull shots, goals, assist, and key passes data}
+#Collect shots, goals, assists, and key passes into their own dataframes
+shots<-subset(event_data, Event.Name=='Shot')
+goals<-subset(shots, Tag.1=='Goal')
+shot_attempts<-subset(shots, Tag.1!='Goal')
+assists<-subset(event_data, Tag.1=='Assist')
+key_passes<-subset(event_data, Tag.1=='Key pass')
+
+#convert x and y coordinate columns from characters to integer values
+assists$x.Start=as.numeric(assists$x.Start)
+assists$y.Start=as.numeric(assists$y.Start)
+assists$x.End=as.numeric(assists$x.End)
+assists$y.End=as.numeric(assists$y.End)
+key_passes$x.Start=as.numeric(key_passes$x.Start)
+key_passes$y.Start=as.numeric(key_passes$y.Start)
+key_passes$x.End=as.numeric(key_passes$x.End)
+key_passes$y.End=as.numeric(key_passes$y.End)
+
+#convert assist event and subevent labels to factors
+assists$Event.Name=as.factor(assists$Event.Name)
+assists$Subevent.Name=as.factor(assists$Subevent.Name)
+key_passes$Event.Name=as.factor(key_passes$Event.Name)
+key_passes$Subevent.Name=as.factor(key_passes$Subevent.Name)
+
+#Calculate assist distance and add to assist data frame as new column.
+assists<-assists %>% mutate(assist_dist = sqrt((x.End-x.Start)^2+(y.End-y.Start)^2))
+key_passes<-key_passes %>% mutate(keypass_dist = sqrt((x.End-x.Start)^2+(y.End-y.Start)^2))
+```
+
+```{r chekcing for outliers}
+assists_clean<-outlierKD2(assists, assist_dist, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+assists_clean<-na.omit(assists_clean)
+
+assists_clean_x<-outlierKD2(assists, x.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+assists_clean_x<-na.omit(assists_clean_x)
+
+assists_clean_y<-outlierKD2(assists, y.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+assists_clean_y<-na.omit(assists_clean_y)
+
+key_passes_clean<-outlierKD2(key_passes, keypass_dist, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+key_passes_clean<-na.omit(key_passes_clean)
+
+key_passes_clean_x<-outlierKD2(key_passes, x.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+key_passes_clean_x<-na.omit(key_passes_clean_x)
+
+key_passes_clean_y<-outlierKD2(key_passes, y.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+key_passes_clean_y<-na.omit(key_passes_clean_y)
+
+shot_attempts_clean_x<-outlierKD2(shot_attempts, x.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+shot_attempts_clean_x<-na.omit(shot_attempts_clean_x)
+
+shot_attempts_clean_y<-outlierKD2(shot_attempts, y.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+shot_attempts_clean_y<-na.omit(shot_attempts_clean_y)
+
+goals_clean_x<-outlierKD2(goals, x.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+goals_clean_x<-na.omit(goals_clean_x)
+
+goals_clean_y<-outlierKD2(goals, y.Start, rm=TRUE, boxplt = TRUE, histogram = TRUE, qqplt = TRUE)
+goals_clean_y<-na.omit(goals_clean_y)
+```
+
+```{r, checking normality}
+#keypass_x_norm<-shapiro.test(key_passes_clean$x.Start)
+#keypass_x_norm
+assist_x_norm<-shapiro.test(assists_clean$x.Start)
+assist_y_norm<-shapiro.test(assists_clean$y.Start)
+assist_d_norm<-shapiro.test(assists_clean$dist)
+assist_x_norm
+assist_y_norm
+assist_d_norm
+
+```
+
+```{r checking #modes of distributions}
+#assist/keypass length modes:
+assist_modes_length<-modetest(assists_clean$assist_dist)
+assist_modes_length
+key_pass_modes_length<-modetest(key_passes_clean$keypass_dist)
+key_pass_modes_length
+
+#assist/keypass x,y-coordinate modes:
+assist_modes_x<-modetest(assists_clean_x$x.Start)
+assist_modes_y<-modetest(assists_clean_y$y.Start)
+key_pass_modes_x<-modetest(key_passes_clean_x$x.Start)
+key_pass_modes_y<-modetest(key_passes_clean_x$y.Start)
+assist_modes_x
+assist_modes_y
+key_pass_modes_x
+key_pass_modes_y
+
+#goals/shots x,y-coordinate modes:
+goals_modes_x<-modetest(goals_clean_x$x.Start)
+goals_modes_y<-modetest(goals_clean_y$y.Start)
+#shots_modes_x<-modetest(shots_clean$x.Start)
+#shots_modes_y<-modetest(shots_clean$y.Start)
+goals_modes_x
+goals_modes_y
+#shots_modes_x
+#shots_modes_y
+
+```
+```{r locate modes}
+#assist/keypass length mode location:
+#assist_modes_length_loc<-locmodes(assists_clean$assist_dist)
+#assist_modes_length_loc
+#key_pass_modes_length_loc<-locmodes(key_passes_clean$keypass_dist)
+#key_pass_modes_length_loc
+
+#assist/keypass x,y-coordinate mode location:
+#assist_modes_x_loc<-locmodes(assists_clean_x$x.Start)
+assist_modes_y_loc<-locmodes(assists_clean_y$y.Start, mod0 = 2, display=TRUE)
+#key_pass_modes_x_loc<-locmodes(key_passes_clean_x$x.Start)
+key_pass_modes_y_loc<-locmodes(key_passes_clean_x$y.Start, mod0 = 2, display = TRUE)
+#assist_modes_x_loc
+assist_modes_y_loc
+#key_pass_modes_x_loc
+key_pass_modes_y_loc
+```
+
+```{r density mapping  for pitch plots}
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+shot_density<-get_density(shot_attempts$x.Start, shot_attempts$y.Start, n=100)
+```
+
+```{r plot events on soccer pitch}
+shots_fig<-ggplot(shot_attempts, aes(x=x.Start, y=y.Start))+
+  annotate_pitch()+
+  geom_point()+
+  #scale_color_continuous(color='reds')+
+  #geom_point(aes(x=x.Start, y=y.Start))+
+  theme_pitch()+
+  theme(plot.margin = unit(c(-0.5,-0.5,-0.5,-0.5), 'cm'))
+
+goals_fig<-ggplot(goals)+
+  annotate_pitch()+
+  geom_point(aes(x=x.Start, y=y.Start))+
+  theme_pitch()+
+  theme(plot.margin = unit(c(-0.5,-0.5,-0.5,-0.5), 'cm'))
+
+key_passes_fig<-ggplot(key_passes)+
+  annotate_pitch()+
+  geom_point(aes(x=x.Start, y=y.Start))+
+  theme_pitch()+
+  theme(plot.margin = unit(c(-0.5,-0.5,-0.5,-0.5), 'cm'))
+
+assists_fig<-ggplot(assists)+
+  annotate_pitch()+
+  geom_point(aes(x=x.Start, y=y.Start))+
+  theme_pitch()+
+  theme(plot.margin = unit(c(-0.5,-0.5,-0.5,-0.5), 'cm'))
+```
+
+```{r density plots for pitch event plots}
+key_passes_histx<-ggplot()+
+  geom_density(data=(key_passes), aes(x=x.Start, y=..density..), color='Black', fill='Gold', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(0,0.2,0,0.2), 'cm'))
+
+key_passes_histy<-ggplot()+
+  geom_density(data=(key_passes), aes(x=y.Start, y=..density..), color='Black', fill='Gold', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(-0.2,-0.2,0,-0.75), 'cm'))+
+  rotate()
+
+assists_histx<-ggplot()+
+  geom_density(data=(assists), aes(x=x.Start, y=..density..), color='Black', fill='Green', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(0,0.2,0,0.2), 'cm'))
+
+assists_histy<-ggplot()+
+  geom_density(data=(assists), aes(x=y.Start, y=..density..), color='Black', fill='Green', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(-0.2,-0.2,0,-0.75), 'cm'))+
+  rotate()
+
+shot_attemptss_histx<-ggplot()+
+  geom_density(data=(shot_attempts), aes(x=x.Start, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(0,0.2,0,0.2), 'cm'))
+
+
+shot_attempts_histy<-ggplot()+
+  geom_density(data=(shot_attempts), aes(x=y.Start, y=..density..), color='Black', fill='Red', alpha=0.3, ylim=c(0,100))+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(-0.2,-0.2,0,-0.75), 'cm'))+
+  rotate()
+
+goals_histx<-ggplot()+
+  geom_density(data=(goals), aes(x=x.Start, y=..density..), color='Black', fill='Blue', alpha=0.3)+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(0,0.2,0,0.2), 'cm'))
+
+goals_histy<-ggplot()+
+  geom_density(data=(goals), aes(x=y.Start, y=..density..), color='Black', fill='Blue', alpha=0.3, ylim=c(0,100))+
+  scale_x_continuous(limits = c(0,100))+
+  theme(panel.background=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(-0.2,-0.2,0,-0.75), 'cm'))+
+  rotate()
+```
+
+```{r pitch+hist plots}
+key_pass_dist_pitch<-ggarrange(key_passes_histx, NULL, key_passes_fig, key_passes_histy,
+          ncol=2, nrow=2,
+          widths=c(2,1), heights=c(1,2))
+annotate_figure(key_pass_dist_pitch,
+                top=text_grob('Key Pass Distribution', face='bold', size=14))
+
+assist_dist_pitch<-ggarrange(assists_histx, NULL, assists_fig, assists_histy,
+          ncol=2, nrow=2,
+          widths=c(2,1), heights=c(1,2))
+annotate_figure(assist_dist_pitch,
+                top=text_grob('Assist Distribution', face='bold', size=14))
+
+shot_dist_pitch<-ggarrange(shots_histx, NULL, shots_fig, shots_histy,
+          ncol=2, nrow=2,
+          widths=c(2,1), heights=c(1,2))
+annotate_figure(shot_dist_pitch,
+                top=text_grob('Shot Distribution', face='bold', size=14))
+
+goal_dist_pitch<-ggarrange(goals_histx, NULL, goals_fig, goals_histy,
+          ncol=2, nrow=2,
+          widths=c(2,1), heights=c(1,2))
+annotate_figure(goal_dist_pitch,
+                top=text_grob('Goal Distribution', face='bold', size=14))
+```
+
+```{r check distributions of each event type}
+#Histograms of Assist and Key Pass coordinates and distances
+a_k_histd<-ggplot()+
+  geom_histogram(data=assists_clean, aes(x=assist_dist, y=..density..), color='Black', fill='Green', alpha=0.3)+
+  geom_histogram(data=key_passes_clean, aes(x=keypass_dist, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  stat_function(fun = dnorm, args = list(mean = mean(assists_clean$assist_dist), sd = sd(assists_clean$assist_dist)), color='dark green', fill='green', size=1)+
+  stat_function(fun = dnorm, args = list(mean = mean(key_passes_clean$keypass_dist), sd = sd(key_passes_clean$keypass_dist)), color='dark red', fill='green', size=1)+
+  labs(title="Histograms of the length of Assists and Key Passes with Normal Distribution Fit", x="Length", y="Nomralized Count")+
+  scale_color_manual(name='Key',values=c('Green', 'Red'), labels=c('Assists','Key Passes'))+
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+a_k_histx<-ggplot()+
+  geom_histogram(data=(assists_clean), aes(x=x.Start, y=..density..), color='Black', fill='Green', alpha=0.3)+
+  geom_histogram(data=(key_passes_clean), aes(x=x.Start, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  stat_function(fun = dnorm, args = list(mean = mean(assists_clean$x.Start), sd = sd(assists_clean$x.Start)), color='dark green', fill='green', size=1)+
+  stat_function(fun = dnorm, args = list(mean = mean(key_passes_clean$x.Start), sd = sd(key_passes_clean$x.Start)), color='dark red', fill='red', size=1)+
+  labs(title="Histograms of the x-coordinate of Key Passes & Assists with Normal Distribution Fits", x="x-coordinate", y="Nomralized Count")+
+  scale_color_manual(name='Key',values=c('Green', 'Red'), labels=c('Assists','Key Passes'))+
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+a_k_histy<-ggplot()+
+  geom_histogram(data=(assists_clean), aes(x=y.Start, y=..density..), color='Black', fill='Green', alpha=0.3)+
+  geom_histogram(data=(key_passes_clean), aes(x=y.Start, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  stat_function(fun = dnorm, args = list(mean = mean(assists_clean$y.Start), sd = sd(assists_clean$y.Start)), color='dark green', fill='green', size=1)+
+  stat_function(fun = dnorm, args = list(mean = mean(key_passes_clean$y.Start), sd = sd(key_passes_clean$y.Start)), color='dark red', fill='red', size=1)+
+  labs(title="Histograms of the y-coordinate of Key Passes & Assists with Normal Distribution Fits", x="y-coordinate", y="Nomralized Count")+
+  scale_color_manual(name='Key',values=c('Green', 'Red'), labels=c('Assists','Key Passes'))+
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+#Histograms of shots and goals coordinates
+s_g_histx<-ggplot()+
+  geom_histogram(data=(shot_attempts_clean_x), aes(x=x.Start, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  geom_histogram(data=(goals_clean_x), aes(x=x.Start, y=..density..), color='Black', fill='Blue', alpha=0.3)+
+  stat_function(fun = dnorm, args = list(mean = mean(shot_attempts_clean_x$x.Start), sd = sd(shot_attempts_clean_x$x.Start)), color='dark red', fill='red', size=1)+
+  stat_function(fun = dnorm, args = list(mean = mean(goals_clean_x$x.Start), sd = sd(goals_clean_x$x.Start)), color='dark blue', fill='blue', size=1)+
+  labs(title="Histograms of the x-coordinate of Shots & Goals with Normal Distribution Fits", x="x-coordinate", y="Nomralized Count")+
+  scale_color_manual(name='Key',values=c('Blue', 'Red'), labels=c('Goals','Shots'))+
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+s_g_histy<-ggplot()+
+  geom_histogram(data=shot_attempts_clean_y, aes(x=y.Start, y=..density..), color='Black', fill='Red', alpha=0.3)+
+  geom_histogram(data=goals_clean_y, aes(x=y.Start, y=..density..), color='Black', fill='Blue', alpha=0.3)+
+  stat_function(fun = dnorm, args = list(mean = mean(shot_attempts_clean_y$y.Start), sd = sd(shot_attempts_clean_y$y.Start)), color='dark red', fill='red', size=1)+
+  stat_function(fun = dnorm, args = list(mean = mean(goals_clean_y$y.Start), sd = sd(goals_clean_y$y.Start)), color='dark blue', fill='blue', size=1)+
+  labs(title="Histograms of the y-coordinate of Shots & Goals with Normal Distribution Fits", x="y-coordinate", y="Nomralized Count")+
+  scale_color_manual(name='Key',values=c('Blue', 'Red'), labels=c('Goals','Shots'))+
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+```
+
+
+```{r hypothesis testing}
+ttest95_assists<-t.test(assists_clean$assist_dist, mu=mean(key_passes_clean$keypass_dist), conf.level=0.95)
+ttest95_assists
+ttest95_goals_x<-t.test(goals_clean_x$x.Start, mu=mean(shot_attempts_clean_x$x.Start), conf.level = 0.95)
+ttest95_goals_x
+ttest95_goals_y<-t.test(goals_clean_y$y.Start, mu=mean(shot_attempts_clean_y$y.Start), conf.level = 0.95)
+ttest95_goals_y
+```
+
+```{r # each event}
+event_data %>% 
+  group_by(Event.Name) %>%
+  summarise(no_rows = length(Event.Name))
+```
+
+```{r boxplots vs competition}
+#ggplot(shot_attempts_clean_x, aes(x=competition, y=x.Start, fill=competition), xlab=FALSE) + 
+#  geom_boxplot(notch=TRUE) + 
+#  labs(title="Boxplot of shot x-coordinate", x="",
+#       y="x-coordinate") +
+#  theme(panel.background = element_blank(),
+#        panel.border=element_rect(color='black', fill=NA),
+#        axis.text = element_text(size=14),
+#        axis.text.x = element_blank(),
+#        axis.ticks.x = element_blank(),
+#        axis.title = element_text(size=14))
+```
+
+```{r boxplots vs teams}
+#ggplot(shot_attempts_clean_x, aes(x=Team.Name, y=x.Start, fill=Team.Name), xlab=FALSE) + 
+#  geom_boxplot(notch=TRUE) + 
+#  labs(title="Boxplot of shot x-coordinate", x="",
+#       y="x-coordinate") +
+#  theme(panel.background = element_blank(),
+#        panel.border=element_rect(color='black', fill=NA),
+#        axis.text = element_text(size=14),
+#        axis.text.x = element_blank(),
+#        axis.ticks.x = element_blank(),
+#        axis.title = element_text(size=14))
+```
+
+
+```{r density plots}
+#Goal percentage x-coordinate
+goal_density_x<-density(goals_clean_x$x.Start,
+                        n=100, from=0, to=100)
+
+shot_attempt_density_x<-density(shot_attempts_clean_x$x.Start,
+                         n=100, from=0, to=100)
+
+goal_density_x$y=goal_density_x$n/sum(goal_density_x$y)*goal_density_x$y
+shot_attempt_density_x$y<-shot_attempt_density_x$n/sum(shot_attempt_density_x$y)*shot_attempt_density_x$y
+total_shots_x<-goal_density_x$y+shot_attempt_density_x$y
+goal_shot_prob_x<-(goal_density_x$y/total_shots_x)
+
+plot(goal_density_x)
+plot(shot_attempt_density_x)
+plot(goal_shot_prob_x, 
+     xlim=c(60, 100), ylim=c(0,1),
+     xlab='Field Length Percentage',
+     ylab='Goal Probability',
+     main = 'Probability of Shot resulting in a goal vs x-coordinate of shot')
+
+#Goal percentage y-coordinate
+goal_density_y<-density(goals_clean_y$y.Start,
+                        n=100, from=0, to=100)
+shot_attempt_density_y<-density(shot_attempts_clean_y$y.Start,
+                         n=100, from=0, to=100)
+
+goal_density_y$y=goal_density_y$n/sum(goal_density_y$y)*goal_density_y$y
+shot_attempt_density_y$y=shot_attempt_density_y$n/sum(shot_attempt_density_y$y)*shot_attempt_density_y$y
+total_shots_y<-goal_density_y$y+shot_attempt_density_y$y
+goal_shot_prob_y<-(goal_density_y$y/total_shots_y)
+
+plot(goal_density_y)
+plot(shot_attempt_density_y)
+plot(goal_shot_prob_y, 
+     xlim=c(0, 100), ylim=c(0,1),
+     xlab='Field Width Percentage',
+     ylab='Goal Probability',
+     main = 'Probability of Shot resulting in a goal vs y-coordinate of shot')
+
+#Assist:Key pass ratio
+assist_density_length<-density(assists_clean$assist_dist,
+                               n=100, from = 0, to = 100)
+key_pass_density_length<-density(key_passes_clean$keypass_dist,
+                                 n=100, from = 0, to = 100)
+
+assist_density_length$y=assist_density_length$n/sum(assist_density_length$y)*assist_density_length$y
+key_pass_density_length$y=key_pass_density_length$n/sum(key_pass_density_length$y)*key_pass_density_length$y
+total_keyassists=assist_density_length$y+key_pass_density_length$y
+assist_prob_length=assist_density_length$y/total_keyassists
+
+plot(assist_density_length)
+plot(key_pass_density_length)
+plot(assist_prob_length, ylim=c(0,1),
+     xlab='Pass Distance',
+     ylab='Goal Probability',
+     main = 'Probability of pass resulting in a goal vs distance of pass')
+
+#Assist:key pass ratio x-coordinate
+assist_density_x<-density(assists_clean_x$x.Start,
+                          n=100, from = 0, to = 100)
+key_pass_density_x<-density(key_passes_clean_x$x.Start,
+                            n=100, from = 0, to = 100)
+assist_density_x$y=assist_density_x$n/sum(assist_density_x$y)*assist_density_x$y
+key_pass_density_x$y=key_pass_density_x$n/sum(key_pass_density_x$y)*key_pass_density_x$y
+total_keyassists_x=assist_density_x$y+key_pass_density_x$y
+assist_prob_x=assist_density_x$y/total_keyassists_x
+
+plot(assist_density_x)
+plot(key_pass_density_x)
+plot(assist_prob_x, 
+     xlim=c(50, 100), ylim=c(0,1),
+     xlab='Field Length Percentage',
+     ylab='Goal Probability',
+     main = 'Probability of pass resulting in a goal vs x-coordinate of pass')
+
+#Assist:key pass ratio y-coordinate
+assist_density_y<-density(assists_clean_y$y.Start,
+                          n=100, from = 0, to = 100)
+key_pass_density_y<-density(key_passes_clean_y$y.Start,
+                            n=100, from = 0, to = 100)
+
+assist_density_y$y=assist_density_y$n/sum(assist_density_y$y)*assist_density_y$y
+key_pass_density_y$y=key_pass_density_y$n/sum(key_pass_density_y$y)*key_pass_density_y$y
+total_keyassists_y=assist_density_y$y+key_pass_density_y$y
+assist_prob_y=assist_density_y$y/total_keyassists_y
+
+plot(assist_density_y)
+plot(key_pass_density_y)
+plot(assist_prob_y, ylim=c(0,1),
+     xlab='Field Width Percentage',
+     ylab='Goal Probability',
+     main = 'Probability of pass resulting in a goal vs y-coordinate of pass')
+
+```
+```{r 3D probability success plots}
+goal_3D<-kde2d(goals_clean$x.Start, goals_clean$y.Start, n=100, lims = c(range(0,100),range(0,100)))
+goal_3D$z=5109/sum(goal_3D$z)*goal_3D$z
+shot_attempt_3D<-kde2d(shot_attempts$x.Start, shot_attempts$y.Start, n=100, lims = c(range(0,100),range(0,100)))
+shot_attempt_3D$z=38586/sum(shot_attempt_3D$z)*shot_attempt_3D$z
+total_shots_3D<-goal_3D$z+shot_attempt_3D$z
+goal_shot_prob_3D<-goal_3D$z/total_shots_3D
+```
+
+```{r plot 3D probability plots}
+goal_shot_3D_fig<-plot_ly(x=goal_3D$x, y=goal_3D$y, z=goal_shot_prob_3D) %>% add_surface()
+goal_shot_3D_fig
+
+goal_3D_fig<-plot_ly(x=goal_3D$y, y=goal_3D$x, z=goal_3D$z) %>% add_surface()
+goal_3D_fig
+
+shot_attempt_3D_fig<-plot_ly(x=shot_attempt_3D$x, y=shot_attempt_3D$y, z=shot_attempt_3D$z) %>% add_surface()
+shot_attempt_3D_fig
+#goal_shot_3D_fig<-plot_ly(x=goal_shot_3D$x, y=goal_shot_3D$y, z=goal_shot_3D$z) %>% add_surface() %>% layout(xaxis=list(autorange='reversed'))
+#goal_shot_3D_fig
+```
+
+```{r putting probabilities into dataframe}
+success_prob<-data.frame('field_loc'=goal_density_x$x, 
+                         'goal_prob_x'=goal_shot_prob_x,
+                         'goal_prob_y'=goal_shot_prob_y,
+                         'goal_prob_xy'=goal_shot_prob_x*goal_shot_prob_y,
+                         'assist_prob_x'=assist_prob_x,
+                         'assist_prob_y'=assist_prob_y,
+                         'assist_prob_xy'=assist_prob_x*assist_prob_y,
+                         'assist_prob_length'=assist_prob_length
+                            )
+success_prob[is.na(success_prob)]=0
+
+success_prob_goals<-ggplot(success_prob, aes(x=))
+```

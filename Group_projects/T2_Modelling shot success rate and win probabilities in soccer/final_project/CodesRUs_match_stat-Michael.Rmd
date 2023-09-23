@@ -1,0 +1,247 @@
+---
+title: "CodesRUs-michael"
+authors: "Daniel Diaz, Ganesh Ghimire, Rose Mesina, and Michael Womble"
+date: "March 9, 2022"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: cerulean
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+library(ggplot2)
+library(ggsoccer)
+library(ggpubr)
+library(dplyr)
+library(vtable)
+library(purrr)
+library(MASS)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "markup", message = F, echo=F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r read csv}
+match_summary <- data.frame(read.csv('./datasets/match_summary.csv'))
+xkabledplyhead(match_summary)
+```
+
+In order to analyze a particular variable (e.g. # goals), we need to transform the dataset from long to wide. This way, each match-team combination will have a corresponding # goals value stored in the same column.
+
+```{r long to wide}
+
+#Create separate datasets for Team1 and Team2. Only keeping totals as well as the relevant team's stats
+
+team1 <- match_summary[c('team1','team1.goals', 'team1.shots','team1.shots.target','team1.passes','team1.pass.acc','team1.possession','team1.corners','team1.offsides','team1.fouls','team1.yellows','team1.reds')]
+
+str(team1)
+
+colnames(team1) <- c('team', 'goals', 'shots', 'shots.target', 'passes','pass.acc', 'possession', 'corners', 'offsides', 'fouls', 'yellows', 'reds')
+
+team2 <- match_summary[c('team2','team2.goals', 'team2.shots','team2.shots.target','team2.passes','team2.pass.acc','team2.possession','team2.corners','team2.offsides','team2.fouls','team2.yellows','team2.reds')]
+
+str(team2)
+
+colnames(team2) <- c('team', 'goals', 'shots', 'shots.target', 'passes','pass.acc', 'possession', 'corners', 'offsides', 'fouls', 'yellows', 'reds')
+
+teams <- rbind(team1, team2)
+
+```
+
+The dataset teams now has 3,882 records that can be used to analyze number of goals and the factors that influence it. We will run various linear regression models and evaluate them against one another. For this exercise, we will only use continuous variables and then check adjusted R squared to compare models.
+
+```{r linear regressions}
+
+teams_cont <- subset(teams, select = -c(team))
+loadPkg("leaps")
+best2 <- regsubsets(goals~., data = teams_cont, nbest = 2, method='seqrep')
+plot(best2, scale = "adjr2", main = "Adjusted R^2")
+
+# The best model
+adjr2_model <- lm(goals ~ shots + shots.target + pass.acc + possession + corners + offsides + fouls + reds, data = teams_cont)
+summary(adjr2_model)
+library(car)
+vif(adjr2_model)
+```
+
+The best model for goals consists of shots, shots.target, pass.acc, possession, corners, offsides, fouls, and reds. This model, however, only has an adjusted R Squared value of 0.409. This indicates that there is some information being left out of the model that could explain variation in number of goals. The only other variables available are passes and yellows. However, those variables appear to be correlated with others already in the model (see below). 
+
+```{r correlation}
+library(corrplot)
+corr <- cor(teams_cont)
+corrplot(corr)
+```
+
+```{r Making training and testing datasets}
+# Make training and test data sets
+set.seed(1)
+row.number<-sample(1:nrow(teams), 0.8*nrow(teams))
+teams_train<-teams[row.number,]
+teams_test<-teams[-row.number,]
+
+# Train model
+model_goals<-lm(goals ~ shots + shots.target + pass.acc + possession + corners + fouls, data=teams_train)
+summary(model_goals)
+plot(model_goals)
+
+# Predict
+teams_test$pred_goals<-predict(model_goals, newdata=teams_test)
+rmse <- sqrt(sum((exp(pred_goals) - teams_test$goals)^2)/length(teams_test$goals))
+c(RMSE = rmse, R2=summary(model_goals)$r.squared)
+
+plot(teams_test$goals, pred_goals, xlab='Expected Goals', ylab='Predicted Goals', main='Results of Testing', ylim = c(-0.5,7), xlim=c(-0.5,7))
+abline(lm(pred_goals~goals,data=teams_test),col='red')
+```
+
+```{r cross validation}
+library(caret)
+set.seed(2)
+train_control <- trainControl(method = "repeatedcv",
+                            number = 10, repeats = 3)
+model <- train(goals ~., data = teams_cont,
+               method = "lm",
+               trControl = train_control)
+pred<-predict(model, newdata = teams_test)
+rmse <- sqrt(sum((exp(pred_goals) - teams_test$goals)^2)/length(teams_test$goals))
+c(RMSE = rmse, R2=summary(model_goals)$r.squared)
+plot(teams_test$goals, pred)
+```
+
+```{r multinomial logistic regression}
+library(caret)
+require(nnet)
+
+# create separate data set from linear model
+teams_logit<-teams
+
+# Convert goals to factor type variable
+teams_logit$goals<-as.factor(teams_logit$goals)
+
+# Create training and test data sets
+index<-createDataPartition(teams_logit$goals, p=0.7, list=FALSE)
+train<-teams_logit[index,]
+test<-teams_logit[-index,]
+
+# Train model
+train$goals<-relevel(train$goals, ref='0')
+multinomial_model<-multinom(goals ~ ., data=train, MaxNWts=100000)
+
+# Test model
+test$goalsPredicted<-predict(multinomial_model, newdata = test, "class")
+
+# Results
+tab<-table(test$goals, test$goalsPredicted)
+tab
+
+#round((sum(diag(tab))/sum(tab))*100,2)
+```
+
+```{r simplifying match summary}
+winner<-match_summary$winner
+shot_ratio<-match_summary$team1.shots-match_summary$team2.shots
+shot_ratio<-round(shot_ratio, digits=2)
+shot_target_ratio<-match_summary$team1.shots.target-match_summary$team2.shots.target
+shot_target_ratio<-round(shot_target_ratio, digits=2)
+pass_ratio<-match_summary$team1.passes-match_summary$team2.passes
+pass_ratio<-round(pass_ratio, digits=2)
+pass_acc_ratio<-match_summary$team1.pass.acc-match_summary$team2.pass.acc
+pass_acc_ratio<-round(pass_acc_ratio, digits=2)
+possession_ratio<-match_summary$team1.possession-match_summary$team2.possession
+possession_ratio<-round(possession_ratio, digits=2)
+corners_ratio<-match_summary$team1.corners-match_summary$team2.corners
+corners_ratio<-round(corners_ratio, digits=2)
+offside_ratio<-match_summary$team1.offsides-match_summary$team2.offsides
+offside_ratio<-round(offside_ratio, digits=2)
+foul_ratio<-match_summary$team1.fouls-match_summary$team2.fouls
+foul_ratio<-round(foul_ratio, digits=2)
+yellow_ratio<-match_summary$team1.yellows-match_summary$team2.yellows
+yellow_ratio<-round(yellow_ratio, digits=2)
+red_ratio<-match_summary$team1.reds-match_summary$team2.reds
+red_ratio<-round(red_ratio, digits=2)
+lists<-list(winner=winner,
+            shot.dif=shot_ratio,
+            shot.target.dif=shot_target_ratio,
+            pass.dif=pass_ratio,
+            pass.acc.dif=pass_acc_ratio,
+            possession.dif=possession_ratio,
+            corners.dif=corners_ratio,
+            offside.dif=offside_ratio,
+            foul.dif=foul_ratio,
+            yellow.dif=yellow_ratio,
+            red.dif=red_ratio)
+match_diff<-as.data.frame(do.call(cbind, (lists)))
+match_diff$winner<-as.factor(match_diff$winner)
+match_diff$shot.ratio<-as.numeric(match_diff$shot.dif)
+match_diff$shot.ratio.target<-as.numeric(match_diff$shot.target.dif)
+match_diff$pass.ratio<-as.numeric(match_diff$pass.dif)
+match_diff$pass.acc.ratio<-as.numeric(match_diff$pass.acc.dif)
+match_diff$possession.ratio<-as.numeric(match_diff$possession.dif)
+match_diff$corners.ratio<-as.numeric(match_diff$corners.dif)
+match_diff$offside.ratio<-as.numeric(match_diff$offside.dif)
+match_diff$foul.ratio<-as.numeric(match_diff$foul.dif)
+match_diff$yellow.ratio<-as.numeric(match_diff$yellow.dif)
+match_diff$red.ratio<-as.numeric(match_diff$red.dif)
+xkabledplyhead(match_summary)
+xkabledplyhead(match_diff)
+```
+
+```{r logistical regression using match_diff}
+#library(bestglm)
+#winner_model<-glm(winner ~ ., data=match_diff, family='binomial')
+#summary(winner_model)
+
+#xkabledply(winner_model, title = paste("Logistic Regression :", format(formula(winner_model)) ))
+
+#winner_model2<-glm(winner ~ shot.dif + shot.target.dif + pass.acc.dif + corners.dif, data = match_diff, family='binomial')
+#summary(winner_model2)
+```
+
+```{r confusion matrix}
+loadPkg("regclass")
+xkabledply(confusion_matrix(winner_model), title = "Confusion matrix from Logit Model" )
+```
+
+```{r ROC and AUC}
+loadPkg("pROC")
+prob=predict(winner_model2, type = "response" )
+match_diff$prob=prob
+h <- roc(winner~prob, data=match_diff)
+auc(h)
+plot(h, main='ROC Curve')
+```
+
+```{r train and test}
+# Make training and test data sets
+set.seed(1)
+row.number<-sample(1:nrow(match_diff), 0.8*nrow(match_diff))
+match_train<-match_diff[row.number,]
+match_test<-match_diff[-row.number,]
+
+## Train
+winner_model<-glm(winner ~ ., data=match_train, family='binomial')
+
+## Test
+pred<-predict(winner_model, newdata = match_test, type='response')
+match_test$pred=pred
+
+## Confusion Matrix
+conf_matrix<-xkabledply(confusion_matrix(winner_model2), title = "Confusion matrix from Logit Model" )
+conf_matrix
+accuracy=(567+562)/1552
+recall=(214+562)/776
+
+## Calculate ROC and AUC
+h <- roc(winner~prob, data=match_diff)
+auc(h)
+plot(h)
+```
