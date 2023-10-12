@@ -1,0 +1,146 @@
+---
+title: "R - Assignment Mod 2 Week 2"
+author: "Michael Womble"
+date: "1/27/2022"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=F}
+# The package "ezids" (EZ Intro to Data Science) includes a lot of the helper functions we developed for the course. 
+# Some of the frequently used functions are loadPkg(), xkabledply(), xkablesummary(), uzscale(), etc.
+# Once installed, load the library.
+library(ezids)
+```
+
+
+```{r setup, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+#knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+# knitr::opts_chunk$set(include = F)
+# knitr::opts_chunk$set(echo = TRUE)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r}
+# 1. Answer each question using in words/paragraph. 
+# 2. DO NOT use comments inside code blocks (like here) to answer anything. Those are for notes between coders/self. They 
+# will be ignored, and not counted as answers. 
+# 3. Keep the line/option    knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+# You can temporarily turn this on/off and use other option while you are working on the homework if it helps. 
+# The submitted work should have this option selected instead.
+# 4. All charts/graphs/tables should have appropriate captions. 
+```
+
+# HW - Module 2 week 02
+
+## Q1. 
+Read in the file with all the baseball players height, weight and age info (BaseballHeightWeight.csv) as a dataframe and save it as baseball. Then display the structure of the dataframe.
+
+```{r Q1, include=T}
+baseball<-data.frame(read.csv("BaseballHeightWeight.csv"))
+str(baseball)
+```
+The baseball data is shown to be a data frame with 1034 players listed (observables) and listing 6 variables for each player.
+
+## Q2. 
+print out the first 5 and the last 3 rows of the dataframe
+```{r Q2}
+head(baseball, 5)
+tail(baseball, 3)
+```
+
+## Q3. 
+Change the headers/column names from Weight.pounds. to weight, from Height.inches. to height, and Age to age.
+```{r Q3}
+colnames(baseball)[which(names(baseball)=="Weight.pounds.")]<-"weight"
+colnames(baseball)[which(names(baseball)=="Height.inches.")]<-"height"
+colnames(baseball)[which(names(baseball)=="Age")]<-"age"
+```
+
+## Q4. 
+Print out the first two lines again to see the new column names.
+```{r Q4}
+head(baseball, 2)
+```
+
+## Q5. 
+Find the statistics (summary) of the heights, weights, and ages of the players. Using complete sentences, give the reader these summary.
+```{r Q5}
+summary(baseball)
+```
+The distribution of player heights has a mean equal to 73.7 inches, a median equal to 74 inches. The tallest player is 83 inches tall and the shortest player is 67 inches.
+
+The distribution of player weights has a mean equal to 202 pounds, a median equal to 200 pounds. The heaviest player is 290 pounds and the lightest player is 150 pounds.
+
+The distribution of player ages has a mean equal to 28.7 years, a median equal to 27.9 years. The oldest player is 48.5 years old and the youngest player is 20.9 years old.
+
+## Q6. 
+You should find an issue with the weight data with an NA value. Use the subset( ) function, select that data point (save as shyboy) and find out who the shy boy was.
+```{r Q6}
+shyboy<-subset(baseball,is.na(weight))
+shyboy
+```
+The shyboy is Kirk Saarloos.
+
+## Q7. 
+Remove shyboy from baseball, and then show the number of observations of the cleaned up dataframe baseball.
+```{r, Q7}
+baseball_clean=baseball[-c(641)]
+str(baseball_clean)
+```
+
+## Q8. 
+Make a quick boxplot of the weight of the players. Use the title( ) function immediately to add a title to the chart. (Try color #0000FF for blue.)
+```{r Q8}
+boxplot(baseball_clean$weight, col="Blue")
+title("Boxplot of Baseball Player Weights")
+```
+
+## Q9. 
+Make a histogram of the weight of the players. Try color 'green' this time. The function understands the word 'green' just fine. Give it a better title than the default. Does the distribution looks normal?
+```{r Q9}
+hist(baseball_clean$weight, main='Histogram of Baseball Player Weights', col='Green')
+```
+
+## Q10. 
+Use ggplot, make a plot with weights vs heights of the players, color by Teams. Give it an appropriate title.
+```{r Q10}
+library(ggplot2)
+ggplot(data=baseball_clean, mapping=aes(x=height, y=weight))+geom_point(aes(color=Team))+labs(title='Player Weight vs Height by Team')
+```
+
+## Q11. 
+Make a plot with weights vs heights of the players, color by age
+```{r Q11}
+ggplot(data=baseball_clean, mapping=aes(x=height, y=weight))+geom_point(aes(color=age))+labs(title='Player Weight vs Height by Team')
+```
+
+## Q12. 
+Obtain a subset of the data with only Team Washington. Using complete sentences, give the number of players in Team Washington.
+```{r Q12}
+team_washington<-subset(baseball_clean, Team=='WAS')
+str(team_washington)
+```
+There are 36 players on Washington
+
+## Q13. 
+Obtain another subset with Team Washington and only players older than 28. How many are there in this veteran group?
+```{r Q13}
+veteran_washington<-subset(team_washington, age>28)
+str(veteran_washington)
+```
+There are 14 players over the age of 28 on Washington.

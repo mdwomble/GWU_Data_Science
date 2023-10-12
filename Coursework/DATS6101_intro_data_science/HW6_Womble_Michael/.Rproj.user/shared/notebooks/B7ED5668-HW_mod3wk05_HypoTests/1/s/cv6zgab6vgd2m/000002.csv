@@ -1,0 +1,2 @@
+"0","Accepted<-subset(Adata2, admit==1)"
+"0","Rejected<-subset(Adata2, admit==0)"

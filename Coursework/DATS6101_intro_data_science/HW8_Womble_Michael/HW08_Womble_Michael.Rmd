@@ -1,0 +1,222 @@
+---
+title: "Intro to DS - Linear Model part 2, and Feature Selection"
+author: "Michael Womble"
+date: "2/24/2022"
+# date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+library(dplyr)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+# HW assignment 
+
+## Linear model - continued, bikeshare data
+
+### Question 1  
+**Import the data, call it `bikeorig.`**  
+Like last time, import the data, remove unwanted columns, and check column data type. Again, select only the rush hour (`Hour`=16) data.  
+```{r Q1}
+#Load bike dataset.
+bikeorig<-data.frame(read.csv('bikedata.csv'))
+
+#Remove Date, Casual users, and registered users.
+col_remove<-c("Date", "Casual.Users", "Registered.Users")
+bike<-bikeorig%>%
+  select(-one_of(col_remove))
+
+#Rename several columns in the bike datarame.
+bike <- bike %>%
+  rename(weekday=Day.of.the.Week,
+         workday=Working.Day,
+         weather=Weather.Type,
+         temp.F=Temperature.F,
+         feels_like=Temperature.Feels.F,
+         users=Total.Users)
+
+#Pull the Hour 16 data
+bike16<-subset(bike, Hour==16)
+str(bike16)
+```
+**Answer:** Imported data into r as bikeorig. A subset for hour=16 was selected put in bike16 dataframe.
+
+### Question 2    
+**Use ANOVA to compare the three different models you found in previous homework.**  
+You have found three different models last time. Use ANOVA test to compare their residuals. What conclusions can you draw just from ANOVA?
+```{r Q2}
+#Models found from previous assignment.
+fit1<-lm(users~feels_like, data=bike16)
+fit2<-lm(users~feels_like+weather, data=bike16)
+fit3<-lm(users~feels_like+weather+Humidity, data=bike16)
+
+#ANOVA test of the 3 models
+anova_res<-anova(fit1,fit2,fit3)
+anova_res
+xkabledply(anova_res)
+```
+**Answer:** The residual sum squares values are quite large for each model, on the order of 1e7. The residual sum squares value does decrease by 1e6 going from fit1 to fit2 indicating a large improvement in the second model when compared to model 1. Going from fit2 to fit3 the residual sum squares value decreases again, by about 200,000, showing that fit3 is a significant improvement over fit2. Despite the improvement going from fit1 to fit3, the sitll large residual sum square value of fit3 indicates that this is still a poor model for the given data.
+
+### Question 3  
+**Build models with interaction terms.**  
+Let us build models with interaction terms between a categorical and a numerical variable. Choose one numeric, and one categorical variable (with more than two levels) to build the model. First write down the model result as a single model with complex coefficients depending on the scenarios. Then re-write the results as separate models for the different subsets with various levels for the categorical variable.
+```{r Q3}
+bike16_2<-bike16
+bike16_2$weather=factor(bike16$weather)
+fit2_int<-lm(users~feels_like+weather+feels_like:weather, data=bike16_2)
+summary(fit2_int)
+xkabledply(fit2_int)
+```
+**Answer:** Chose to use weather as the categorical variable, which has 4 levels.   
+Separate Models:  
+weather 1: y = 98.038 + 0 + (3.433 - 0)*x  
+weather 2: y = 98.038 - 98.904 + (3.433 - 1.506)*x  
+weather 3: y = 98.038 - 172.639 + (3.433 - 0.687)*x  
+weather 4: y = 98.038 - 153.360 + 3.433*x  
+(note: the interaction term between feels_like and weather 4 came back as NA. From what I have read this indicates that the variable in question is linearly related to one of the other variables being used.)
+
+### Question 4  
+**Coefficient p-value and VIF checks.**  
+Make sure you check these values, interpret them appropriately, and give comments. 
+```{r Q4}
+summary(fit2_int)
+xkablevif(fit2_int)
+```
+**Answer:** The quantitative variable that I chose to use in my model is the feels_like temperature. The categorical variable I chose is the weather variable. Looking at the p-values, most of the models when using different values for weather result in models that are statistically different from each other. However, from the VIF values of these variables, particularly the interaction variables, are just over 10 indicating a large degree of correlation between them.
+
+### Question 5   
+**Interaction term between two categorical variables**  
+Try add an interaction term between two categorical variable this time to the one in question 4. At least one categorical variable should have more than 2 levels. What do you observe?  Explain the result to a laymen in your own way.   
+```{r Q5}
+bike16_2$workday=factor(bike16$workday)
+fit2_int2<-lm(users~feels_like+weather+workday+feels_like:weather+weather:workday, data=bike16_2)
+summary(fit2_int2)
+xkablevif(fit2_int2)
+```
+**Answer:** For the second categorical variable I chose to use the workday variable. Looking at the p-values of the models using this additional variable (including the interaction terms) do not indicate a statistically significant difference between the models using these extra variables. Additionally, the VIF values of the workday variables (including interaction variables) were larger than 10 indicating high degrees of correlation, indicating they're not desirable to use in this model.
+
+### Question 6   
+**One more check.**  
+Look at the residuals, leverage, influence and cook's distance plot for this latest model. Comment on the result. 
+```{r Q6, fig.show='hold', out.width='50%'}
+plot(fit2_int2)
+```
+**Answer:** The residuals are quite large, indicating that this model is a poor fit for the data.
+
+## Feature Selection - Ozone Dataset in LA (1976)  
+This section uses the ozone dataset in the “[faraway](https://www.rdocumentation.org/packages/faraway/versions/1.0.7/topics/ozone)” package. 
+```{r}
+loadPkg("faraway")
+ozdf = faraway::ozone
+```
+
+### Question 7 
+**Determine if the `O3` (ozone concentration) and `temp` variables are normal.**
+```{r Q7, fig.show='hold', out.width='50%'}
+hist(ozdf$O3, xlab = 'Ozone Concentration', main = 'Histogram of Ozone Concentration Data in Ozone Data Set')
+shapiro.test(ozdf$O3)
+hist(ozdf$temp, xlab='Temperature (Farenheit)', main = 'Histogram of Temperature Data in Ozone Data Set')
+shapiro.test(ozdf$temp)
+```
+**Answer:** The O3 variable is not normal. The temp variable is close to normal. This is determined both visually, through use of histograms, and statistically using the Shapiro-Wilk normality test, where O3 had a p-value of 6E-13 (indicating non-normality) and temp had a p-value of 0.04 (indicating almost normal)
+
+### Question 8  
+**Apply Pearson and Spearman measure on the two variables `O3` and `temp`.**  
+Which one of these two is suitable for this scenario according to the summary pdf, and why?
+```{r Q8, results='markup'}
+pearson_corr<-cor.test(ozdf$O3, ozdf$temp, method='pearson')
+pearson_corr
+spearman_corr<-cor.test(ozdf$O3, ozdf$temp, method='spearman')
+spearman_corr
+```
+**Answer:**
+
+### Question 9  
+**Make a model for visibility (`vis`) with other variables as predictors in the dataset.**  
+Since we do not have a lot of variables, we can use the exhaustive method in regsubsets to identify what factors are best used to predict visibility. 
+Also select `nbest = 2`. According to adjusted R2, what is the best model? What are the features to use? 
+Build out that model and find the adjusted R2 value as well as the VIF. Are you pleased with this model?
+```{r Q9}
+library(leaps)
+reg<-regsubsets(vis~. , data=ozdf, nbest=2, method='exhaustive')
+plot(reg, scale = "adjr2", main = "Adjusted R^2")
+
+fit_vis<-lm(vis ~ O3, data = ozdf)
+fit_vis2<-lm(vis ~ ibt + humidity + doy, data = ozdf)
+fit_vis3<-lm(vis ~ ibt + humidity + doy + wind, data = ozdf)
+fit_vis4<-lm(vis ~ ibt + humidity + doy + wind + O3 + temp, data = ozdf)
+summary(fit_vis)
+summary(fit_vis2)
+summary(fit_vis3)
+summary(fit_vis4)
+vis_anova<-anova(fit_vis, fit_vis2, fit_vis3, fit_vis4)
+vis_anova
+
+#for fit_vis3 which I deem to be the best fit
+xkablevif(fit_vis4)
+```
+**Answer:** According to the adjusted R^2 model. The highest adjusted R^2 value acheivable is 0.32 when using six variables; O3, vh, wind, humidity, ibh, and doy. I don't feel like this is the best model, so I decided to compare 4 different models given by the regsubset plot with increasing adjusted R^2 values.  The first model, fit_vis, used only the O3 variable and had an adjusted R^2 value of 0.192. The second model, fit_vis2, used three variables; ibt, humidity, and doy. This gave an adjusted R^2 value of 0.292. The third model, fit_vis3, used four variables;ibt, humidity, doy, and wind. It gave an adjusted R^2 value of 0.306. Finally, the fourth model, fit_vis4, used 6 variables; ibt, humidity, doy, wind, O3, and vh. This model gave an adjusted R^2 value of 0.314. Next, I ran an ANOVA test on the four different models to determine if they were statistically different from each other. The models in improving order are fit_vis1 < fit_vis2 < fit_vis3 ~ fit_vis4, with the p-values between neighboring models being 8.3E-11, 0.0066, and 0.0516, respectively. To me this indicates that fit_vis3 is significanlty better than both 1 and 2 and is worth the addition of extra variable. However, while fit_vis4 shows a higher adjusted R^2 value than fit_vis3, the p-value of 0.0516 is does not signify to me a significant enough improvement over fit_vis3 to warrant the use of the two additional variables fit_vis4 has compared to fit_vis3. Additionally, VIF values of variables in fit_vis3 are all around 1, while two variables in fit_vis4 have values around 5, and another just over 3, indicating significant degrees of correlation. For these reasons I think fit_vis3 is the best fit, and while looking at the adjusted R^2 is useful in helping direct your search for the best model it needs to be accompanied with a tool like anova to achieve the best fit. 
+
+### Question 10  
+**From the same result in the previous question, but use BIC instead.**  
+Build the best model with this criterion and find the adjusted $R^2$ as well as VIF. Are you pleased with this model? 
+```{r Q10}
+plot(reg, scale = "bic", main = "BIC")
+
+fit_vis_bic<-lm(vis ~ wind + humidity + ibt, data = ozdf)
+summary(fit_vis_bic)
+bic_adR_aov<-anova(fit_vis3, fit_vis_bic)
+bic_adR_aov
+```
+**Answer:** Using the BIC method to determine best fits gives a best fit with three variables; wind, humidity, and ibt. This model has an adjusted R^2 value of 0.298. I then used anova to compare this model, fit_vis_bic, to the best fit I got using adjusted R^2, fit_vis3. While the anova test resulted in a p-value of 0.036, indicating that the difference in these models is statistically significant, with fit_vis3 having a better adjusted R^2 value of 0.306 compared to fit_vic_bic, with an adjsuted R^2 value of 0.298, practically it may not make a big difference. I would be happy with either of these models. That being said, using the BIC method was quicker to arrive at a best fit model than when using the adjusted R^2 method.
+
+### Question 11   
+**To use $C_p$, we should use the stopping rule of $C_p$ ≈ (# regressors + 1).**  
+Follow the example in class (or [this example](https://rstudio-pubs-static.s3.amazonaws.com/2897_9220b21cfc0c43a396ff9abf122bb351.html)) to produce a visual graph for the task. Build out the best model again and find the adjusted $R^2$  value and VIF. 
+```{r Q11}
+library(car)
+subsets(reg, statistic="cp", legend = FALSE, min.size = 3, main = "Mallow Cp")
+abline(a = 1, b = 1, lty = 2) 
+
+fit_vis_cp<-lm(vis ~ O3 + wind + humidity + ibh + doy, data=ozdf)
+summary(fit_vis_cp)
+xkablevif(fit_vis_cp)
+```
+**Answer:** Selected the model on abline that had the lowest subset size. In this case that model had 5 variables; O3, wind, humidity, ibh, and doy. This model, fit_vis_cp, had an adjusted R^2 value of 0.314 and the VIFs of the variables ranged from 1.11 to 1.84, showing low correlation between the variables selected.
+
+
+### Question 12   
+**While you are at Question 11, also produce the graph for using adjusted R2 as criterion.**  
+This won’t change the result in Question 9. This is just an alternative visualization for the adjusted $R^2$ case. We can see better how different are the nearby models.
+```{r Q12}
+subsets(reg, statistic="adjr2", legend = FALSE, min.size = 3, main = "Adjusted R^2")
+```
+
+
+### Question 13  
+**Using ANOVA, compare the models you found in questions 9, 10, and 11.**  
+Comment on the result.
+```{r Q13}
+fits_all_aov<-anova(fit_vis3, fit_vis_bic, fit_vis_cp)
+fits_all_aov
+
+```
+**Answer:** Using ANOVA, it can be determined that there is a statistical difference between all three models, fit_vis3, fit_vis_bic, and fit_vis_cp. The three models, fit_vis3, fit_vis_bic, and fit_vis_cp, have adjusted R^2 values of 0.306, 0.298, and 0.314, respectively. I, personally, find it surpising that such small differences in adjusted R^2 can so statistically significant. Another thing to note is that all of these models use a different number of variables. The fit_vis3 uses four variables, fit_vis_bic uses three variables, and the fit_vis_cp uses 5 variables. So the question is, despite the improved adjusted R^2 values from using more variables, is that practically worth the extra variables? This is hard to judge without actually testing the model rather than just running ANOVA of the models.

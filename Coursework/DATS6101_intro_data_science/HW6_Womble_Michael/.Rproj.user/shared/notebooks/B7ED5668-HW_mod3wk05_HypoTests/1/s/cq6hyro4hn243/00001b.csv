@@ -1,0 +1,7 @@
+"2","Warning in gzfile(file, ""wb"") :"
+"2","
+ "
+"2"," cannot open compressed file 'C:/Users/dmmkm/Documents/George Washington University/Coursework/Data Science - Certificate/Intro to Data Science/Homework/HW6_Womble_Michael/.Rproj.user/shared/notebooks/B7ED5668-HW_mod3wk05_HypoTests/1/B47B7353C85ADFB0/cq6hyro4hn243_t/da6061904c9f4581b0f5160daa2a1010.snapshot', probable reason 'No such file or directory'
+"
+"2","Error in gzfile(file, ""wb"") : cannot open the connection
+"

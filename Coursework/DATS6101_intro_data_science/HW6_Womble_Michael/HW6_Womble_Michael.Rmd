@@ -1,0 +1,243 @@
+---
+title: "Intro to DS - Assignment Mod 3 Week 5 - Hypothesis Tests, T-test, 2-sample T-test, ANOVA, Chi-squared"
+author: "Michael Womble"
+date: "2/9/2022"
+# date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+# HW Assignment - Hypothesis Testing 
+
+This exercise uses the same graduate school admissions dataset from last homework. The dataset is LogRegAdmit.csv.  
+The variables in the dataset are:  
+
+* `admit`: 0 or 1 (False or True)
+* `gre`: gre score
+* `gpa`: grade point average at undergraduate level
+* `rank`: the ranking of the applicant’s undergraduate institute, 1, 2, 3, or 4
+
+
+## Grad School Admissions
+
+
+### Question 1
+
+**Same as last homework, import the dataset as Adata, and make sure the data type for the variables are set properly for categorical variables.**
+
+```{r q01}
+Adata <- data.frame(read.csv("LogRegAdmit.csv"))
+Adata$admit<-as.factor(Adata$admit)
+Adata$rank<-as.factor((Adata$rank))
+```
+
+Applicant data is imported as Adata and admit and rank columns are converted from numeric and integer data types, respectively, to factor data type.
+
+### Question 2
+
+**Use the `outlierKD2()` function, remove the outliers for gre and gpa. Save the resulting dataframe as Adata2. You will need to do this in two steps, removing outliers for one variable at a time. How many NA values are in gre and in gpa with the resulting dataframe *Adata2*? **
+
+```{r Q2}
+summary(Adata)
+Adata2<-outlierKD2(Adata, gre, rm=TRUE, boxplt=FALSE, histogram=FALSE)
+Adata2<-outlierKD2(Adata, gpa, rm=TRUE, boxplt=FALSE, histogram=FALSE)
+Adata2$admit<-as.factor(Adata2$admit)
+Adata2$rank<-as.factor((Adata2$rank))
+summary(Adata2)
+na<-subset(Adata2, is.na(gpa))
+Adata2_clean<-na.omit(Adata2)
+```
+After removing outliers from both GPA and GRE data there is one NA value in the GPA column and zero in the GRE column.
+
+### Question 3
+
+**Like last time, separate the two subsets again, for admitted and rejected. **
+```{r Q3}
+Accepted<-subset(Adata2_clean, admit==1)
+Rejected<-subset(Adata2_clean, admit==0)
+```
+
+The data for accepted applicants is sorted into the Accepted data frame, while the data for the rejected applicants is sorted into the Rejected data frame.
+
+### Question 4
+
+**We were a little careless last time. Let us check for normality on the numerical variables. Let us use histogram (use `ggplot()`) and QQ-plot (use `qqnorm()`) to check the quantitative variables for the admitted and rejected subsets. Make a brief comment on the results. **
+
+```{r Q4, fig.show='hold', out.width='50%'}
+library(ggplot2)
+
+#Plot histogram of gre scores of accepted applicants
+hist_gre_accepted<-ggplot(Accepted, aes(x=gre)) + 
+  geom_histogram(color='black', fill='green', aes(y=..density..))+
+  xlim(200,1000)+
+  stat_function(fun = dnorm, args = list(mean = mean(Accepted$gre), sd = sd(Accepted$gre)), color='dark green', fill='green', size=1.5) +
+ # geom_area(stat="function", fun=dnorm, fill='green')+
+  labs(title="Histogram of GRE Scores of Accepted Applicants", x="GRE Score", y="Density") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=16),
+        axis.title = element_text(size=16),
+        plot.title = element_text(hjust = 0.5))
+
+#Plot histogram of gpa of accepted applicants
+hist_gpa_accepted<-ggplot(Accepted, aes(x=gpa)) + geom_histogram(color='black', fill='green', aes(y=..density..))+
+  xlim(0,4)+
+  stat_function(fun = dnorm, args = list(mean = mean(Accepted$gpa), sd = sd(Accepted$gpa)), color='dark green', fill='green', size=1.5) +
+ # geom_area(stat="function", fun=dnorm, fill='green')+
+  labs(title="Histogram of GPA Scores of Accepted Applicants", x="GPA", y="Density") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=16),
+        axis.title = element_text(size=16),
+        plot.title = element_text(hjust = 0.5))
+
+#Plot histogram of gre scores of rejected applicants
+hist_gre_rejected<-ggplot(Rejected, aes(x=gre)) + geom_histogram(color='black', fill='red', aes(y=..density..))+
+  xlim(200,1000)+
+  stat_function(fun = dnorm, args = list(mean = mean(Accepted$gre), sd = sd(Accepted$gre)), color='dark red', fill='red', size=1.5) +
+ # geom_area(stat="function", fun=dnorm, fill='green')+
+  labs(title="Histogram of GRE Scores of Rejected Applicants", x="GRE Score", y="Density") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=16),
+        axis.title = element_text(size=16),
+        plot.title = element_text(hjust = 0.5))
+
+#Plot histogram of gpa of rejected applicants
+hist_gpa_rejected<-ggplot(Rejected, aes(x=gpa)) + geom_histogram(color='black', fill='red', aes(y=..density..))+
+  xlim(0,4)+
+  stat_function(fun = dnorm, args = list(mean = mean(Accepted$gpa), sd = sd(Accepted$gpa)), color='dark red', fill='red', size=1.5) +
+ # geom_area(stat="function", fun=dnorm, fill='green')+
+  labs(title="Histogram of GPA Scores of Rejected Applicants", x="GPA", y="Density") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=16),
+        axis.title = element_text(size=16),
+        plot.title = element_text(hjust = 0.5))
+
+#Display histogram plots
+hist_gre_accepted
+hist_gpa_accepted
+hist_gre_rejected
+hist_gpa_rejected
+```
+**Figure 1** (Top Left) GRE scores of accepted applicants, (Top Right)GPAs of accepted applicants, (Bottom Left) GRE scores of rejected applicants, and (Bottom Righ) GPAs of rejected applicants.
+
+**Answer:**All distributions don't look too far off of normal. However, there is a slight left tail skew to all the data. This is probably simply due to the fact that both GREs and GPAs have an upper limit.
+
+
+
+### Question 5
+
+**Does the two subgroups have different gre average and gpa average? Use the standard $\alpha$ = 0.05. What are the p-values for the test on gre and gpa? What are your conclusions from the tests? **
+
+```{r Q5}
+ttest95_gre<-t.test(Accepted$gre, mu=mean(Rejected$gre), conf.level = 0.95)
+ttest95_gpa<-t.test(Accepted$gpa, mu=mean(Rejected$gpa), conf.level = 0.95)
+ttest95_gre
+ttest95_gpa
+```
+**Answer:** The two subgroups have different gre and gpa scores. A t-test was done on both GRE scores and GPAs with the null hypothesis being that the mean GRE score and GPA of accepted applicants is equal to the mean GRE score and GPA of rejected students. The alternative hypothesis being that they are not equal. In both instances the mean GRE score and GPAs of accepted applicants were greater than those of the rejected applicants, with the mean GRE score of accepted applicants having a p-score of 8e-06 and the GPA of accepted applicants having a p-score of 3e-05 at alpha=0.05. This allows us to accept the alternative hypothesis that there is a statistically significant difference in the mean GRE score and mean GPA accepted applicants compared with rejected applicants, with accepted applicants having mean GRE score and mean GPA of 619 and 3.49, respectively, while the rejected applicants have a mean GRE score and mean GPA of 574 and 3.35, respectively.
+
+
+
+### Question 6
+
+**With the dataset Adata2, construct a contingency table between rank and admit. Are these two variables qualitative or quantitative? **
+
+```{r Q6, results="markup"}
+contable<-table(Adata2_clean$rank, Adata2_clean$admit)
+xkabledply(contable, title="Contingency table for Admission vs Applicant Rank (0=Rejected, 1=Accepted")
+```
+
+**Answer:** Both rank and admission are qualitative variables.
+
+
+
+### Question 7
+
+**Find out whether rank is independent of admission, according to the contingency table above. **
+
+```{r Q7}
+chitest = chisq.test(contable)
+chitest
+```
+**Answer:** Running a chi test on the contingency table, a p-value of 2e-05 is calculated indicating that the variables rank and admission are not independent of each other.
+
+
+
+### Question 8
+
+**From *Adata2*, test whether students from the four ranks have the same average gre or not. And also test if they have the same average gpa or not. Remember that if they are not all the same, you will need to follow up with a post hoc test. Make brief comments on your results.**
+
+```{r Q8-1, fig.show='hold' , out.width='50%'}
+library(ggplot2)
+
+#Boxplot of GRE scores vs rank
+ggplot(Adata2_clean, 
+       aes(x=rank, y=gre, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Applicant GRE scores Grouped by Class Rank", x="Applicant Rank", y="Applicant GRE Scores") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+#Boxplot of GPAs vs rank
+ggplot(Adata2_clean, 
+       aes(x=rank, y=gpa, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Applicant GPAs Grouped by Class Rank", x="Applicant Rank", y="Applicant GPAs") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+```
+**Figure 2.** Boxplots of Applicant GRE scores (Left) and GPAs (Right) grouped by class rank.
+
+```{r q8-2, results='markup', fig.show='hold', out.width='50%'}
+#Run anova test GRE and GPA vs Rank
+gre_anova<-aov(gre~rank, data = Adata2_clean)
+gpa_anova<-aov(gpa~rank, data = Adata2_clean)
+sum_gre_anova<-summary(gre_anova)
+sum_gpa_anova<-summary(gpa_anova)
+xkabledply(gre_anova, title='Results of ANOVA on GRE Scores vs Rank')
+xkabledply(gpa_anova, title='Results of ANova on GPAs vs Rank')
+```
+
+```{r Q8-3, fig.show='hold', out.width='50%'}
+#Tukey post hoc test (not really needed in this case)
+tukey_gre<-TukeyHSD(gre_anova)
+tukey_gpa<-TukeyHSD(gpa_anova)
+plot(tukey_gre)
+plot(tukey_gpa)
+
+```
+**Figure 3:** Tukey test for applicant GRE scores (Left) and GPAs (Right) based on rank.
+
+**Answer:** The first step taken was to make a box plot of applicant GRE scores and GPAs vs rank. From the boxplots we can take an educated guess about whether the GRE scores and GPAs of Applicants of different ranks show a significant difference from each other. In this instance, neither GRE scores nor GPAs seem to show a significant difference between different ranks. To confirm this ANOVA is run, the results of which confirm our educated guess from the box plots that there is no significant difference between GRE score and GPAs among different ranks. For a closer look at the pairwise comparisons we can run a Tukey post hoc test and see that no comparisons show a difference in the GRE scores or GPAs between different ranks.
+
+
+
+
+

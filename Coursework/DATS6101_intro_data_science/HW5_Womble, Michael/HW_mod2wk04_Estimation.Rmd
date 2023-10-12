@@ -1,0 +1,172 @@
+---
+title: "R - Assignment Mod 2 Week 4 - Estimation"
+author: "Michael Womble"
+date: "2/4/2022"
+# date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r init, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis'/'markup',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+library(ezids)
+# knitr::opts_chunk$set(warning = F, results = "markup", message = F)
+knitr::opts_chunk$set(warning = F, results = "hide", message = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+# HW Assignment - Estimation 
+
+This exercise uses the graduate school admissions dataset from the applicants to a higher-ed institute. The dataset is LogRegAdmit.csv.  
+The variables in the dataset are:  
+
+* `admit`: 0 or 1 (False or True)
+* `gre`: gre score
+* `gpa`: grade point average at undergraduate level
+* `rank`: the ranking of the applicant's undergraduate institute, 1, 2, 3, or 4
+
+
+## Grad School Admissions
+
+### Question 1  
+
+**After importing the dataset as Adata, check the structure. Make sure admit and rank are stored as factors, instead of numeric or integers. (Hint: Use as.factor() function or factor() function).**
+
+```{r Q1}
+Adata<-data.frame(read.csv("LogRegAdmit.csv"))
+Adata$admit<-as.factor(Adata$admit)
+Adata$rank<-as.factor((Adata$rank))
+```
+**Answer:**\
+Applicant data is imported as Adata and admit and rank columns are converted from numeric and integer data types, respectively, to factor data type.
+
+
+### Question 2  
+**Construct t-intervals for the gre and gpa data for all applicants at 0.80 level and 0.99 level. **
+```{r Q2}
+gre_ttest80<-t.test(Adata$gre, conf.level = 0.8)
+gre_ttest80
+gpa_ttest80<-t.test(Adata$gpa, conf.level = 0.8)
+gpa_ttest80
+gre_ttest99<-t.test(Adata$gre, conf.level = 0.99)
+gre_ttest99
+gpa_ttest99<-t.test(Adata$gpa, conf.level = 0.99)
+gpa_ttest99
+```
+**Answer:**\
+The t-intervals for applicant GRE scores and GPAs at the 80% confidence level 580.3 - 595.1 and 3.37 - 3.41, respectively. Increasing the confidence level to 99% the t-intervals for applicant GRE scores and GPAs are 572.8 - 602.6 and 3.34 - 3.44, respectively. The mean GRE score is 587.7 and the mean GPA is 3.39.
+
+
+### Question 3  
+**Repeat the same calculation for gre in Question 2 but for admitted (1) and rejected (0) separately. (You can subset them first.) Between the admitted and rejected, does the two intervals overlap at 0.80 level? And at 0.99 level?**
+```{r Q3}
+Accepted<-subset(Adata, admit==1)
+Rejected<-subset(Adata, admit==0)
+
+acceptedgre_ttest80<-t.test(Accepted$gre, conf.level = 0.8)
+acceptedgre_ttest80
+rejectdgre_ttest80<-t.test(Rejected$gre, conf.level = 0.8)
+rejectdgre_ttest80
+
+acceptedgre_ttest99<-t.test(Accepted$gre, conf.level = 0.99)
+acceptedgre_ttest99
+rejectdgre_ttest99<-t.test(Rejected$gre, conf.level = 0.99)
+rejectdgre_ttest99
+```
+**Answer:**\
+The confidence intervals for applicant GRE scores do not overlap between students who were accepted and those who were rejected for 80% confidence level, nor for the 99% confidence level. The difference between the upper interval limit of students rejected and the lower interval limit of students who were accepted does decrease significantly going from 80% to 99% confidence levels. In fact, at 99% confidence level, the difference between the two values is only by two.
+
+
+### Question 4   
+**Make (box-) plots showing the gre distribution among applicants from different school rankings for the admitted and rejected separately. Please use ggplot for this. The x-variable should be rank, and the y-variable should be gre.**
+
+```{r Q4, fig.show='hold', out.width="50%"}
+library(ggplot2)
+ggplot(Accepted, 
+       aes(x=rank, y=gre, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Accepted Applicant GRE scores Grouped by Class Rank", x="Applicant Rank", y="Applicant GRE Scores") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+ggplot(Rejected, 
+       aes(x=rank, y=gre, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Rejected Applicant GRE scores Grouped by Class Rank", x="Applicant Rank", y="Applicant GRE Scores") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+ 
+
+```
+**Figure 1.** GRE Scores vs class rank of (Left) accepted applicants, and (Right) rejected applicants
+
+
+### Question 5   
+**Repeat Question 3 for gpa. Do the two groups have t-intervals overlap at 0.80 level? At 0.99 level?**
+```{r Q5}
+acceptedgpa_ttest80<-t.test(Accepted$gpa, conf.level = 0.8)
+acceptedgpa_ttest80
+rejectdgpa_ttest80<-t.test(Rejected$gpa, conf.level = 0.8)
+rejectdgpa_ttest80
+
+acceptedgpa_ttest99<-t.test(Accepted$gpa, conf.level = 0.99)
+acceptedgpa_ttest99
+rejectdgpa_ttest99<-t.test(Rejected$gpa, conf.level = 0.99)
+rejectdgpa_ttest99
+```
+**Answer:**\
+The confidence intervals for applicant GPAs do not overlap between students who were accepted and those who were rejected for 80% confidence level, nor for the 99% confidence level, barely. The difference between the upper interval limit of students rejected and the lower interval limit of students who were accepted does decrease significantly going from 80% to 99% confidence levels. In fact, at 99% confidence level, the difference between the two values is only 0.0004 which is negligible.
+
+
+### Question 6   
+**Repeat Question 4 for gpa. Make (box-) plots showing the gpa distribution among applicants from different school rankings for the admitted and rejected separately. Again, use ggplot.**
+```{r Q6, fig.show='hold', out.width="50%"}
+library(ggplot2)
+ggplot(Accepted, 
+       aes(x=rank, y=gpa, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Accepted Applicant GPAs Grouped by Class Rank", x="Applicant Rank", y="Applicant GPA") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+
+ggplot(Rejected, 
+       aes(x=rank, y=gpa, fill=rank)) + 
+  geom_boxplot(notch = FALSE, show.legend = FALSE) +
+  labs(title="Boxplot of Rejected Applicant GPAs Grouped by Class Rank", x="Applicant Rank", y="Applicant GPA") +
+  theme(panel.background = element_blank(),
+        panel.border=element_rect(color='black', fill=NA),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=14))
+```
+**Figure 2.** GPA vs class rank of (Left) accepted applicants, and (Right) rejected applicants
+
+
+### Question 7  
+**As EDA from the charts and the t-interval calculations you produced, do you observe any potential effects between gre/gpa/rank on admissions? Explain briefly. **
+
+**Answer:**\
+There is a statistically significant difference in both the mean GRE scores and mean GPAs of students who were accepted and those who were not. However, this is hard to see in the box plots displaying the GRE scores for accepted and rejected students. It is only with the aid of the t-intervals that we are able to tell there's a difference between the GRE scores of accepted students and rejected students. There is a much clearer difference though, when looking at the box plots of showing the GPAs of accepted students and rejected students, and this is backed up by looking at the t-intervals. That being said, the distributions of both GRE scores and GPAs for accepted and rejected students overlap significantly, even though there is a difference in their means. Not only that but this is the case for all class ranks. So while an applicant with a higher a higher GRE score and GPA is more likely to be accepted, as shown by the difference and t-intervals of accepted and rejected students, the distributions overlap enough to indicate that there are other factors that go into making the decision wether to accept an applicant or not.
+
+
+
+
+
+
